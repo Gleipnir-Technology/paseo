@@ -67,6 +67,9 @@ const additionalInputs = [
   // the Nix derivation builds for one platform at a time and ships only
   // its own binaries.
   `node_modules/node-pty/prebuilds/${process.platform}-${process.arch}/**`,
+  // npm rebuild node-pty compiles to build/Release/pty.node, which is
+  // what actually works on NixOS (prebuilds link against wrong glibc paths).
+  "node_modules/node-pty/build/Release/**",
   // sherpa-onnx-node dynamically resolves a platform-specific native package.
   // Copy the wrapper plus the host platform package explicitly.
   "node_modules/sherpa-onnx-node/**",
