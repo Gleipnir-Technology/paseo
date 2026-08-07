@@ -4,6 +4,7 @@
   buildNpmPackage,
   nodejs_22,
   python3,
+  pkg-config,
   makeWrapper,
   autoPatchelfHook,
   # node-pty needs libuv headers on Linux
@@ -75,6 +76,7 @@ buildNpmPackage rec {
   nativeBuildInputs = [
     python3 # for node-gyp (node-pty compilation)
     makeWrapper
+    pkg-config # node-gyp needs pkg-config to discover libuv
   ] ++ lib.optionals stdenv.hostPlatform.isLinux [
     autoPatchelfHook
   ];
@@ -90,10 +92,12 @@ buildNpmPackage rec {
   buildPhase = ''
     runHook preBuild
 
-    # Rebuild only node-pty (native addon for terminal emulation). The sherpa
-    # speech runtime ships prebuilt platform packages and is copied into the
-    # daemon closure by scripts/trace-daemon.mjs.
-    npm rebuild node-pty
+    # Rebuild only node-pty (native addon for terminal emulation). Use npx
+    # node-gyp directly instead of npm rebuild so we bypass prebuild-install
+    # (which tries to download a prebuilt binary and fails in the sandbox).
+    # The sherpa speech runtime ships prebuilt platform packages and is copied
+    # into the daemon closure by scripts/trace-daemon.mjs.
+    npx --no-install node-gyp rebuild --directory packages/server/node_modules/node-pty
 
     # Build all server packages in dependency order (defined in package.json)
     npm run build:server
