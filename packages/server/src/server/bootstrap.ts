@@ -758,47 +758,6 @@ export async function createPaseoDaemon(
   // remain protected.
   mountWebUi(app, config, logger);
 
-  // Loopback-only enumeration of currently-registered service routes, joined to
-  // each owning workspace's displayName. Served pre-bearer so a same-host
-  // workspace router (nidus-sync paseo-host-router) can map public
-  // <slug>.<user>.<domain> hostnames to this daemon's authoritative .localhost
-  // service hostnames without re-deriving paseo's label logic or reading the
-  // 0700 ~/.paseo registry over the filesystem. Reveals only the service
-  // hostnames already exposed through public DNS + the router; bound to the
-  // daemon's loopback listener.
-  app.get("/api/workspace-routes", (req, res) => {
-    const remote = req.socket.remoteAddress ?? "";
-    const isLoopback = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remote);
-    if (!isLoopback) {
-      res.status(403).json({ error: "loopback only" });
-      return;
-    }
-    void (async () => {
-      const routes = serviceProxy.listRegisteredRoutes();
-      const workspaceRoutes: Array<{
-        workspaceId: string;
-        displayName: string;
-        projectSlug: string;
-        scriptName: string;
-        hostname: string;
-      }> = [];
-      for (const route of routes) {
-        const workspace = await workspaceRegistry?.get(route.workspaceId);
-        if (!workspace) {
-          continue;
-        }
-        workspaceRoutes.push({
-          workspaceId: route.workspaceId,
-          displayName: workspace.displayName,
-          projectSlug: route.projectSlug,
-          scriptName: route.scriptName,
-          hostname: route.hostname,
-        });
-      }
-      res.json({ routes: workspaceRoutes });
-    })();
-  });
-
   app.use(
     createRequireBearerMiddleware(config.auth, (context) => {
       logger.warn(context, "Rejected HTTP request with invalid daemon password");
@@ -823,6 +782,42 @@ export async function createPaseoDaemon(
       version: daemonVersion,
       listen: formatListenTarget(boundListenTarget ?? listenTarget),
     });
+  });
+
+  // Enumeration of currently-registered service routes, joined to each owning
+  // workspace's displayName. Registered after the daemon bearer-auth middleware,
+  // so it requires the daemon password like the rest of the /api surface. An
+  // external host router (nidus-sync paseo-host-router) authenticates with the
+  // daemon password and maps public per-user <slug>.<user>.<domain> hostnames to
+  // this daemon's authoritative .localhost service hostnames without re-deriving
+  // paseo's label logic or reading the 0700 ~/.paseo registry over the
+  // filesystem. The daemon binds loopback, so only same-host callers can reach
+  // it regardless.
+  app.get("/api/workspace-routes", (_req, res) => {
+    void (async () => {
+      const routes = serviceProxy.listRegisteredRoutes();
+      const workspaceRoutes: Array<{
+        workspaceId: string;
+        displayName: string;
+        projectSlug: string;
+        scriptName: string;
+        hostname: string;
+      }> = [];
+      for (const route of routes) {
+        const workspace = await workspaceRegistry?.get(route.workspaceId);
+        if (!workspace) {
+          continue;
+        }
+        workspaceRoutes.push({
+          workspaceId: route.workspaceId,
+          displayName: workspace.displayName,
+          projectSlug: route.projectSlug,
+          scriptName: route.scriptName,
+          hostname: route.hostname,
+        });
+      }
+      res.json({ routes: workspaceRoutes });
+    })();
   });
 
   const handleFileDownload = async (req: express.Request, res: express.Response): Promise<void> => {
