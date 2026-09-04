@@ -805,6 +805,7 @@ export interface ServiceProxySubsystem {
   getHealthCheckTargets(): ServiceProxyHealthTarget[];
   getWorkspaceHealthTargets(workspaceId: string): ServiceProxyHealthTarget[];
   getHealthTargetForHostname(hostname: string): ServiceProxyHealthTarget | null;
+  listRegisteredRoutes(): ServiceProxyRouteEntry[];
   projectUrls(input: {
     projectSlug: string;
     branchName: string | null;
@@ -885,6 +886,10 @@ class NodeServiceProxySubsystem implements ServiceProxySubsystem {
 
   getHealthTargetForHostname(hostname: string): ServiceProxyHealthTarget | null {
     return this.routes.getHealthTargetForHostname(hostname);
+  }
+
+  listRegisteredRoutes(): ServiceProxyRouteEntry[] {
+    return this.routes.listRoutes();
   }
 
   projectUrls(input: {
