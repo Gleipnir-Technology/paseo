@@ -1782,6 +1782,68 @@ test("createAgent forwards request env into the spawned provider process", async
   }
 });
 
+test("buildLaunchContext merges worktree env for an agent in a paseo worktree", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-worktree-env-"));
+  const captured: Record<string, string | undefined> = {};
+  class WorktreeEnvCapturingClient extends TestAgentClient {
+    override async createSession(
+      config: AgentSessionConfig,
+      launchContext?: AgentLaunchContext,
+    ): Promise<AgentSession> {
+      Object.assign(captured, launchContext?.env);
+      return new TestAgentSession(config);
+    }
+  }
+  const manager = new AgentManager({
+    clients: { codex: new WorktreeEnvCapturingClient() },
+    logger,
+    resolveAgentWorktreeEnv: async (cwd) =>
+      cwd === workdir ? { PASEO_WORKTREE_PATH: workdir, PASEO_BRANCH_NAME: "odd-eel" } : null,
+  });
+
+  try {
+    await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+
+  expect(captured.PASEO_WORKTREE_PATH).toBe(workdir);
+  expect(captured.PASEO_BRANCH_NAME).toBe("odd-eel");
+  expect(captured.PASEO_AGENT_CWD).toBe(workdir);
+});
+
+test("buildLaunchContext injects no worktree env outside a paseo worktree", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-no-worktree-env-"));
+  const captured: Record<string, string | undefined> = {};
+  class NoWorktreeEnvCapturingClient extends TestAgentClient {
+    override async createSession(
+      config: AgentSessionConfig,
+      launchContext?: AgentLaunchContext,
+    ): Promise<AgentSession> {
+      Object.assign(captured, launchContext?.env);
+      return new TestAgentSession(config);
+    }
+  }
+  const manager = new AgentManager({
+    clients: { codex: new NoWorktreeEnvCapturingClient() },
+    logger,
+    resolveAgentWorktreeEnv: async () => null,
+  });
+
+  try {
+    await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+
+  expect(captured.PASEO_WORKTREE_PATH).toBeUndefined();
+  expect(captured.PASEO_AGENT_CWD).toBe(workdir);
+});
+
 test("normalizeConfig strips legacy 'default' model id", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
   const storagePath = join(workdir, "agents");

@@ -139,6 +139,7 @@ import {
 import type { PaseoToolRuntimeContext } from "./agent/tools/types.js";
 import { createAgentProviderRuntime } from "./agent/provider-runtime.js";
 import { bootstrapWorkspaceRegistries } from "./workspace-registry-bootstrap.js";
+import { resolveAgentWorktreeEnv as resolveAgentWorktreeEnvForCwd } from "./agent-worktree-env.js";
 import { WorkspaceReconciliationService } from "./workspace-reconciliation-service.js";
 import {
   FileBackedProjectRegistry,
@@ -951,6 +952,11 @@ export async function createPaseoDaemon(
     onWorkspaceStateMayHaveChanged: ({ cwd }) => {
       workspaceGitService.onWorkspaceStateMayHaveChanged(cwd);
     },
+    // Mark agents launched inside a paseo-owned worktree with PASEO_WORKTREE_PATH
+    // so processes they spawn use the worktree's isolated resources (e.g. its
+    // replica DB) rather than the shared/default ones.
+    resolveAgentWorktreeEnv: (cwd) =>
+      resolveAgentWorktreeEnvForCwd(() => workspaceRegistry.list(), cwd),
     mcpAuthToken: agentMcpAuthToken,
     logger,
   });

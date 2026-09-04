@@ -290,6 +290,16 @@ export interface AgentManagerOptions {
     agentId: string;
     expectedTurnId: string;
   }) => Promise<void>;
+  /**
+   * Resolves the worktree env markers (at minimum `PASEO_WORKTREE_PATH`) to
+   * merge into an agent process about to be launched under `cwd`, or null when
+   * `cwd` is not inside a paseo-managed worktree (source checkout / manual
+   * directory — those keep running against the default resource). Wired by the
+   * daemon from the workspace registry so consumers can tell an agent it is
+   * operating inside a paseo worktree and route it to the worktree's isolated
+   * resources. When omitted, no worktree env is injected.
+   */
+  resolveAgentWorktreeEnv?: (cwd: string) => Promise<Record<string, string> | null>;
   logger: Logger;
 }
 
@@ -700,6 +710,9 @@ export class AgentManager {
   private onWorkspaceStateMayHaveChanged?: (params: { cwd: string }) => void;
   private logger: Logger;
   private readonly rescueTimeouts: Required<AgentManagerRescueTimeouts>;
+  private readonly resolveAgentWorktreeEnv?: (
+    cwd: string,
+  ) => Promise<Record<string, string> | null>;
   private readonly beforeSteerUnavailableFallback?: AgentManagerOptions["beforeSteerUnavailableFallback"];
   private acceptingAgentRegistrations = true;
 
@@ -721,6 +734,7 @@ export class AgentManager {
         options.rescueTimeouts?.interruptSessionMs ?? INTERRUPT_SESSION_TIMEOUT_MS,
     };
     this.beforeSteerUnavailableFallback = options.beforeSteerUnavailableFallback;
+    this.resolveAgentWorktreeEnv = options.resolveAgentWorktreeEnv;
     this.agentStreamCoalescer = new AgentStreamCoalescer({
       windowMs: options.agentStreamCoalesceWindowMs ?? AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS,
       timers: { setTimeout, clearTimeout },
@@ -4831,10 +4845,18 @@ export class AgentManager {
     cwd: string,
     env?: Record<string, string>,
   ): Promise<AgentLaunchContext> {
+    const worktreeEnv = this.resolveAgentWorktreeEnv
+      ? await this.resolveAgentWorktreeEnv(cwd)
+      : null;
     const context: AgentLaunchContext = {
       agentId,
       env: {
         ...env,
+        // When the agent runs inside a paseo-owned worktree, carry the worktree
+        // markers (PASEO_WORKTREE_PATH et al.) so processes the agent spawns are
+        // routed to the worktree's isolated resources (e.g. its replica DB)
+        // instead of the shared/default ones.
+        ...worktreeEnv,
         PASEO_AGENT_ID: agentId,
         PASEO_AGENT_CWD: cwd,
       },
