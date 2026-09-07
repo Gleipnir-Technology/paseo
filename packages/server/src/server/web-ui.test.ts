@@ -157,6 +157,26 @@ describe("daemon web UI route module", () => {
     expect(res.body).toContain('"label":"test-label"');
   });
 
+  test("defaults the hint port when the Host header omits one", async () => {
+    const app = createApp({ enabled: true, distDir, publicDir });
+
+    const res = await request(app, "GET", "/", { host: "daemon.example.test" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toContain('"listen":"daemon.example.test:80"');
+    expect(res.body).toContain('"useTls":false');
+  });
+
+  test("leaves an explicit Host header port untouched", async () => {
+    const app = createApp({ enabled: true, distDir, publicDir });
+
+    const res = await request(app, "GET", "/", { host: "daemon.example.test:8443" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toContain('"listen":"daemon.example.test:8443"');
+    expect(res.body).toContain('"useTls":false');
+  });
+
   test("injects hint before closing head tag", async () => {
     const app = createApp({ enabled: true, distDir, publicDir });
 
