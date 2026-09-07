@@ -124,6 +124,30 @@ describe("daemon bearer auth", () => {
     }
   });
 
+  test("requires the daemon password on /api/workspace-routes when configured", async () => {
+    const daemonHandle = await createTestPaseoDaemon({
+      auth: { password: CORRECT_PASSWORD_HASH },
+    });
+    try {
+      const missing = await fetch(`http://127.0.0.1:${daemonHandle.port}/api/workspace-routes`);
+      expect(missing.status).toBe(401);
+
+      const wrong = await fetch(`http://127.0.0.1:${daemonHandle.port}/api/workspace-routes`, {
+        headers: { Authorization: "Bearer wrong-password" },
+      });
+      expect(wrong.status).toBe(401);
+
+      const correct = await fetch(`http://127.0.0.1:${daemonHandle.port}/api/workspace-routes`, {
+        headers: { Authorization: "Bearer correct-password" },
+      });
+      expect(correct.status).toBe(200);
+      const payload = (await correct.json()) as { routes: unknown[] };
+      expect(Array.isArray(payload.routes)).toBe(true);
+    } finally {
+      await daemonHandle.close();
+    }
+  });
+
   test("closes WebSocket connections with readable auth failures when password is configured", async () => {
     const daemonHandle = await createTestPaseoDaemon({
       auth: { password: CORRECT_PASSWORD_HASH },

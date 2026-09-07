@@ -788,6 +788,40 @@ export async function createPaseoDaemon(
     });
   });
 
+  // Enumeration of currently-registered service routes, joined to each owning
+  // workspace's displayName. Registered after the daemon bearer-auth middleware,
+  // so it requires the daemon password like the rest of the /api surface. Lets an
+  // external host router map public per-user <slug>.<user>.<domain> hostnames to
+  // this daemon's authoritative .localhost service hostnames without re-deriving
+  // paseo's label logic or reading the 0700 ~/.paseo registry over the
+  // filesystem.
+  app.get("/api/workspace-routes", (_req, res) => {
+    void (async () => {
+      const routes = serviceProxy.listRegisteredRoutes();
+      const workspaceRoutes: Array<{
+        workspaceId: string;
+        displayName: string;
+        projectSlug: string;
+        scriptName: string;
+        hostname: string;
+      }> = [];
+      for (const route of routes) {
+        const workspace = await workspaceRegistry?.get(route.workspaceId);
+        if (!workspace) {
+          continue;
+        }
+        workspaceRoutes.push({
+          workspaceId: route.workspaceId,
+          displayName: workspace.displayName,
+          projectSlug: route.projectSlug,
+          scriptName: route.scriptName,
+          hostname: route.hostname,
+        });
+      }
+      res.json({ routes: workspaceRoutes });
+    })();
+  });
+
   const handleFileDownload = async (req: express.Request, res: express.Response): Promise<void> => {
     const token =
       typeof req.query.token === "string" && req.query.token.trim().length > 0
