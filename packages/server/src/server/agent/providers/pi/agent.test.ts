@@ -1107,7 +1107,7 @@ describe("PiRpcAgentSession", () => {
     ]);
   });
 
-  test("settles an autonomous turn triggered by a Pi extension custom message", async () => {
+  test("completes an autonomous turn triggered by a Pi extension custom message", async () => {
     const { pi, events } = await createSession();
     const fakeSession = pi.latestSession();
 
@@ -1143,10 +1143,6 @@ describe("PiRpcAgentSession", () => {
         error: null,
       },
     ]);
-    expect(events.turnLifecycleEvents()).toEqual([{ type: "turn_started", turnId: undefined }]);
-
-    fakeSession.settleTurn();
-
     expect(events.turnLifecycleEvents()).toEqual([
       { type: "turn_started", turnId: undefined },
       { type: "turn_completed", turnId: undefined },
@@ -1476,7 +1472,7 @@ describe("PiRpcAgentSession", () => {
     ]);
   });
 
-  test("fails an exhausted Pi recovery only after settlement", async () => {
+  test("fails an exhausted Pi recovery at the terminal attempt", async () => {
     const { pi, session, events } = await createSession();
     const fakeSession = pi.latestSession();
     const { turnId } = await session.startTurn("hello");
@@ -1519,17 +1515,41 @@ describe("PiRpcAgentSession", () => {
       finalError: "Insufficient quota.",
     });
 
-    expect(events.turnLifecycleEvents()).toEqual([{ type: "turn_started", turnId }]);
     expect(events.timelineItems()).toContainEqual({
       type: "error",
       message: "Provider retry (attempt 1): Request timed out.",
     });
+    expect(events.turnLifecycleEvents()).toEqual([
+      { type: "turn_started", turnId },
+      { type: "turn_failed", turnId },
+    ]);
 
     fakeSession.settleTurn();
 
     expect(events.turnLifecycleEvents()).toEqual([
       { type: "turn_started", turnId },
       { type: "turn_failed", turnId },
+    ]);
+  });
+
+  test("completes a Pi turn that reports willRetry=false without an agent_settled event", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+    const { turnId } = await session.startTurn("hello");
+
+    fakeSession.emit({ type: "turn_start" });
+    fakeSession.finishAgentRun({
+      message: {
+        role: "assistant",
+        stopReason: "stop",
+        content: [{ type: "text", text: "Done" }],
+      },
+      willRetry: false,
+    });
+
+    expect(events.turnLifecycleEvents()).toEqual([
+      { type: "turn_started", turnId },
+      { type: "turn_completed", turnId },
     ]);
   });
 
