@@ -2297,13 +2297,17 @@ export class PiRpcAgentSession implements AgentSession {
       return;
     }
     if (event.type === "agent_end") {
+      this.pendingSettledMessages = event.messages ?? [];
+      // Only a scheduled retry keeps the turn open. Pi reports each provider attempt as
+      // agent_end and continues the same turn when willRetry is true. Pi 0.75.4 sets
+      // willRetry on agent_end but never emits agent_settled, so waiting for settlement
+      // would leave every turn stuck on that binary.
       // COMPAT(piAgentSettled): added in v0.5.0, remove after 2027-02-21 once the Pi
-      // floor emits agent_settled and willRetry.
-      if (event.willRetry === undefined) {
-        this.completeTurn(turnId, event.messages ?? []);
+      // floor emits agent_settled.
+      if (event.willRetry === true) {
         return;
       }
-      this.pendingSettledMessages = event.messages ?? [];
+      this.completeTurn(turnId, this.pendingSettledMessages);
       return;
     }
     this.completeTurn(turnId, this.pendingSettledMessages ?? []);
