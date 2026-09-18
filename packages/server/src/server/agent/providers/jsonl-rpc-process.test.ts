@@ -44,6 +44,15 @@ readline.createInterface({ input: process.stdin, crlfDelay: Infinity }).on("line
     respond(command, false, null, "child rejected the request");
     return;
   }
+  if (command.type === "fail_without_id") {
+    process.stdout.write(JSON.stringify({
+      type: "response",
+      command: command.type,
+      success: false,
+      error: "Unknown command: " + command.type,
+    }) + "\n");
+    return;
+  }
   if (command.type === "hang") {
     return;
   }
@@ -160,6 +169,18 @@ describe("JsonlRpcProcess", () => {
     try {
       await expect(transport.request({ type: "fail" })).rejects.toThrow(
         "child rejected the request",
+      );
+    } finally {
+      await transport.close();
+    }
+  });
+
+  test("correlates an error response that omits the request id", async () => {
+    const transport = startProcess();
+
+    try {
+      await expect(transport.request({ type: "fail_without_id" })).rejects.toThrow(
+        "Unknown command: fail_without_id",
       );
     } finally {
       await transport.close();
