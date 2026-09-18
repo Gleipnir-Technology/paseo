@@ -38,6 +38,7 @@ interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timer: NodeJS.Timeout | null;
+  command: string;
 }
 
 export interface JsonlRpcExit {
@@ -165,7 +166,7 @@ export class JsonlRpcProcess {
           ),
         );
       });
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { resolve, reject, timer, command: command.type });
       this.send({ ...command, id });
     });
     return { id, promise };
@@ -261,11 +262,11 @@ export class JsonlRpcProcess {
   /** Route a complete logical frame to its consumer (pending request or subscriber). */
   private dispatchFrame(message: Record<string, unknown>): void {
     const pending =
-      message.type === "response" && typeof message.id === "string"
-        ? this.pending.get(message.id)
-        : undefined;
+      message.type === "response"
+        ? this.takePendingRequest(message as unknown as JsonlRpcResponse)
+        : null;
     if (pending) {
-      this.settleRequest(pending, message as unknown as JsonlRpcResponse & { id: string });
+      this.settleRequest(pending, message as unknown as JsonlRpcResponse);
       return;
     }
     // A response nothing is waiting for is published like any other frame, so a provider
@@ -275,14 +276,10 @@ export class JsonlRpcProcess {
     }
   }
 
-  private settleRequest(
-    pending: PendingRequest,
-    response: JsonlRpcResponse & { id: string },
-  ): void {
+  private settleRequest(pending: PendingRequest, response: JsonlRpcResponse): void {
     if (pending.timer) {
       clearTimeout(pending.timer);
     }
-    this.pending.delete(response.id);
     if (!response.success) {
       pending.reject(
         new Error(
@@ -292,6 +289,45 @@ export class JsonlRpcProcess {
       return;
     }
     pending.resolve(response.data);
+  }
+
+  /**
+   * Match a response to its pending request. Pi's "Unknown command" error omits the
+   * request id, so correlate that by the echoed command when exactly one request for it
+   * is outstanding. Two in-flight requests for the same command make such a response
+   * ambiguous; ignore it rather than settle the wrong request.
+   */
+  private takePendingRequest(response: JsonlRpcResponse): PendingRequest | null {
+    if (response.id) {
+      const pending = this.pending.get(response.id);
+      if (!pending) {
+        return null;
+      }
+      this.pending.delete(response.id);
+      return pending;
+    }
+    if (!response.command) {
+      return null;
+    }
+    let matchId: string | null = null;
+    for (const [id, pending] of this.pending) {
+      if (pending.command !== response.command) {
+        continue;
+      }
+      if (matchId !== null) {
+        return null;
+      }
+      matchId = id;
+    }
+    if (matchId === null) {
+      return null;
+    }
+    const pending = this.pending.get(matchId);
+    if (!pending) {
+      return null;
+    }
+    this.pending.delete(matchId);
+    return pending;
   }
 
   private handleStdinError(error: unknown): void {
