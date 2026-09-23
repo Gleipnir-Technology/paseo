@@ -36,6 +36,12 @@ const traceDesktop = process.env.PASEO_TRACE_DESKTOP === "1";
 // process and preloads as well.
 const entries = [
   "packages/cli/dist/index.js",
+  // The CLI resolves the @getpaseo/server package root at runtime to locate the
+  // daemon runner (require.resolve in cli/.../daemon/local-daemon.ts), but nft
+  // cannot follow that dynamic resolution. Trace the package's root export
+  // explicitly; otherwise dist/server/server/exports.js is left out of $out and
+  // `paseo daemon start` dies with MODULE_NOT_FOUND for it.
+  "packages/server/dist/server/server/exports.js",
   "packages/server/dist/scripts/supervisor-entrypoint.js",
   "packages/server/dist/server/terminal/terminal-worker-process.js",
   "packages/server/dist/server/server/speech/providers/local/worker-process.js",
