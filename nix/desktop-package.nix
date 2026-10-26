@@ -97,6 +97,13 @@ buildNpmPackage {
   buildPhase = ''
     runHook preBuild
 
+    # buildNpmPackage configures npm with --ignore-scripts, so the root
+    # postinstall hook never runs and the patch-package patches stay
+    # unapplied. The renderer imports exports those patches add (for example
+    # BottomSheetModalInternalProvider) and crashes with React error #130
+    # when they are missing.
+    npm run postinstall
+
     # Native deps (terminal emulation; libuv-linked on Linux)
     npm rebuild node-pty
 

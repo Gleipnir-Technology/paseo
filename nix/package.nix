@@ -92,6 +92,13 @@ buildNpmPackage rec {
   buildPhase = ''
     runHook preBuild
 
+    # buildNpmPackage configures npm with --ignore-scripts, so the root
+    # postinstall hook never runs and the patch-package patches stay
+    # unapplied. The web UI imports exports those patches add (for example
+    # BottomSheetModalInternalProvider) and crashes with React error #130
+    # when they are missing.
+    npm run postinstall
+
     # Rebuild only node-pty (native addon for terminal emulation). Use npx
     # node-gyp directly instead of npm rebuild so we bypass prebuild-install
     # (which tries to download a prebuilt binary and fails in the sandbox).
